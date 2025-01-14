@@ -1,50 +1,87 @@
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import io from 'socket.io-client';
+import JoinRoom from "./components/JoinRoom";
 
+const config = {
+  iceServers: [
+    {
+      urls: 'stun:stun.l.google.com:19302' // Google's public STUN server
+    }
+  ]
+};
 
 function App() {
-  const [socet,setSocet] = useState(null);
+  const [socket,setSocket] = useState(null);
   const [join,setJoin] = useState('');
+  const [remoteID,setRemoteID] = useState('');
+  const userVideo = useRef(null);
+  const remoteVideo = useRef(null);
 
-  const handleJoin = (e)=>{
-    setJoin(e.target.value);
+  const initVideo = async ()=>{
+    const stream = await navigator.mediaDevices.getUserMedia({video:true,audio:false});
+    if(userVideo.current) userVideo.current.srcObject = stream;
+    return stream;
   }
-  
-  const handleJoinButton = (e)=>{
-    console.log(join);
-    socet.emit('joinRoom',join);
-    setJoin('');
+
+  const handleIceCandidate = async (e)=>{
+    try{
+        if(e.candidate && socket){
+          await socket.emit('icecandidate',e.candidate);
+          console.log(`Ice Candidate ${e.candidate}`);
+        }
+    }catch(e){
+      console.log("Error in icecandidate function: ",e);
+    }
+
+  }
+
+  const initPeer = async ()=>{
+    const peer = new RTCPeerConnection(config);
+    const localStream = await initVideo();
+    
+    localStream.getTracks().forEach((track)=>{
+      peer.addTrack(track,localStream);
+    });
+
+    peer.ontrack = (e)=>{
+      if(remoteVideo.current) remoteVideo.current.srcObject = e.streams[0];
+    }
+
+    peer.onicecandidate = handleIceCandidate;
+
+    return peer;
+
   }
 
   useEffect(()=>{
     const newsocket = io('http://localhost:5000');
+
+    newsocket.on('userid',rID=>{
+      console.log(rID);
+      initVideo();
+      setRemoteID(rID);
+    });
+
+
     newsocket.emit('message','raj is op');
-    setSocet(newsocket);
+    setSocket(newsocket);
     // newsocket.emit('joinRoom',join);
-  },[])
+
+    return ()=>{
+      newsocket.disconnect();
+    }
+  },[remoteID]);
 
   return (
-    <>
-      <h1 className="text-3xl font-bold mb-5">Frontend Working</h1>
-      <div className="min-h-screen flex flex-col justify-center items-center m-5 p-5 text-2xl">
-        <input 
-          type="text" 
-          placeholder="Enter Room number" 
-          className="mb-4 p-2 border rounded-md w-64 text-lg"
-          value={join}
-          onChange={handleJoin}
-        />
-        <div className="border bg-blue-400 m-5 p-5 flex gap-5 rounded-md ">
-          <button
-          className="bg-green-500 text-white px-4 py-2 rounded-md hover:bg-green-600"
-          onClick={handleJoinButton}
-          >
-            Join Room
-            </button>
-          <button className="bg-red-500 text-white px-4 py-2 rounded-md hover:bg-red-600">Start Call</button>
-        </div>
+    <div>
+    <JoinRoom join={join} setJoin={setJoin} socket={socket}/>
+    <div>
+      <div className="flex justify-center items-center ">
+        <video className="border rounded-lg m-5 p-5 bg-red-600 w-[500px] h-[400px]" ref={userVideo} autoPlay/>
+        <video className="border rounded-lg m-5 p-5 bg-red-600 w-[500px] h-[400px]" ref={userVideo} autoPlay/>
       </div>
-    </>
+    </div>
+    </div>
   );
   
 }

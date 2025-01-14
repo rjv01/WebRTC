@@ -16,7 +16,6 @@ const room = {
 
 io.on('connection',socket =>{
     console.log('socket connected: ',socket.id);
-
     // socket.on('message',msg=>{
     //     console.log(msg);
     // })
@@ -31,6 +30,8 @@ io.on('connection',socket =>{
     if(room[roomid]){
         console.log("My Socket Id:",socket.id);
         console.log("My Remote Socket Id:",room[roomid]);
+        io.to(room[roomid]).emit('userid',socket.id);
+        io.to(socket.id).emit('userid',room[roomid]);
     }
     else{
         room[roomid] = socket.id;
